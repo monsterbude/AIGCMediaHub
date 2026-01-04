@@ -7,16 +7,28 @@ export async function GET(request) {
   const { searchParams } = new URL(request.url)
   const page = parseInt(searchParams.get('page') || '1')
   const limit = parseInt(searchParams.get('limit') || '50')
+  const parentPath = searchParams.get('parentPath')
   const skip = (page - 1) * limit
 
   try {
+    // Build where clause
+    const where = { isActive: true }
+
+    // If parentPath is specified, filter by folder (including subfolders)
+    if (parentPath) {
+      where.OR = [
+        { parentPath: parentPath },
+        { parentPath: { startsWith: parentPath.endsWith('\\') ? parentPath : parentPath + '\\' } }
+      ]
+    }
+
     const [files, total] = await prisma.$transaction([
       prisma.fileMetaInfo.findMany({
         skip,
         take: limit,
         orderBy: { modifiedTime: 'desc' },
-        where: { isActive: true },
-        include: { 
+        where,
+        include: {
           aigcMetaInfo: true,
           tags: {
             include: {
@@ -25,7 +37,7 @@ export async function GET(request) {
           }
         }
       }),
-      prisma.fileMetaInfo.count({ where: { isActive: true } })
+      prisma.fileMetaInfo.count({ where })
     ])
 
     const filesSerialized = files.map(f => ({

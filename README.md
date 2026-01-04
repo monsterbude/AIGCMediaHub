@@ -19,6 +19,8 @@ npm install
 This project uses SQLite. Generate the database and apply the schema using:
 
 ```bash
+echo DATABASE_URL="file:./prisma/dev.db" > .env
+
 npx prisma migrate dev --name init
 ```
 
