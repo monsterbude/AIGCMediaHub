@@ -1,0 +1,98 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model FileMetaInfo {
+  id            Int      @id @default(autoincrement())
+  filePath      String   @unique @map("file_path")
+  parentPath    String   @map("parent_path")
+  fileName      String   @map("file_name")
+  fileSize      BigInt   @map("file_size")
+  fileHash      String?  @map("file_hash")
+  mimeType      String?  @map("mime_type")
+  fileType      String?  @map("file_type")
+  fileExt       String?  @map("file_ext")
+  createdTime   DateTime @map("created_time")
+  modifiedTime  DateTime @map("modified_time")
+  lastScanned   DateTime @default(now()) @map("last_scanned")
+  isActive      Boolean  @default(true) @map("is_active")
+  thumbnailPath String?  @map("thumbnail_path")
+  isFavorite    Boolean  @default(false) @map("is_favorite")
+
+  aigcMetaInfo  AigcMetaInfo?
+  tags          FileTag[]
+
+  @@index([parentPath])
+  @@index([fileHash])
+  @@index([modifiedTime])
+  @@map("file_meta_info")
+}
+
+model AigcMetaInfo {
+  id             Int      @id @default(autoincrement())
+  fileMetaInfoId Int      @unique @map("file_meta_info_id")
+  fileMetaInfo   FileMetaInfo @relation(fields: [fileMetaInfoId], references: [id], onDelete: Cascade)
+
+  sourceTool     String?  @map("source_tool")
+  modelName      String?  @map("model_name")
+  modelHash      String?  @map("model_hash")
+  prompt         String?
+  negativePrompt String?  @map("negative_prompt")
+  steps          Int?
+  sampler        String?
+  cfgScale       Float?   @map("cfg_scale")
+  seed           BigInt?
+  width          Int?
+  height         Int?
+  batchIndex     Int?     @map("batch_index")
+  batchSize      Int?     @map("batch_size")
+  generatedTime  DateTime? @map("generated_time")
+
+  workflowJson   String?  @map("workflow_json")
+  rawParameters  String?  @map("raw_parameters")
+  extraInfo      String?  @map("extra_info")
+
+  @@index([modelName])
+  @@index([seed])
+  @@index([generatedTime])
+  @@map("aigc_meta_info")
+}
+
+model Tag {
+  id          Int       @id @default(autoincrement())
+  name        String    @unique
+  type        String?
+  color       String?
+  createdTime DateTime  @default(now()) @map("created_time")
+
+  files       FileTag[]
+
+  @@index([type])
+  @@map("tags")
+}
+
+model FileTag {
+  id          Int      @id @default(autoincrement())
+  fileId      Int      @map("file_id")
+  tagId       Int      @map("tag_id")
+  source      String?
+  addedTime   DateTime @default(now()) @map("added_time")
+
+  file        FileMetaInfo @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  tag         Tag          @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([fileId, tagId])
+  @@map("file_tags")
+}
+
+model SystemSetting {
+  key   String @id
+  value String
+
+  @@map("system_settings")
+}
