@@ -25,6 +25,9 @@ npm install
 本项目使用 SQLite 存储元数据。执行以下命令生成数据库文件并应用表结构：
 
 ```bash
+# 先创建.env
+DATABASE_URL="file:../user_data.db"
+
 npx prisma migrate dev --name init
 ```
 

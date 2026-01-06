@@ -6,7 +6,7 @@ AIGC Media Hub is a local media management tool designed for AI creators. It aut
 
 ![1767713609847](image/1767713609847.png)
 
-![1767713559473](image/s1767713559473.png)
+![1767713559473](image/1767713559473.png)
 
 ## 1. Project Initialization
 
@@ -25,6 +25,9 @@ npm install
 This project uses SQLite. Generate the database and apply the schema using:
 
 ```bash
+# create .env
+DATABASE_URL="file:../user_data.db"
+
 npx prisma migrate dev --name init
 ```
 
