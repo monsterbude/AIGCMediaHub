@@ -99,14 +99,17 @@ export default function MetadataSidebar({
                     {selectedFile.tags && selectedFile.tags.length > 0 && (
                         <div className="flex flex-wrap gap-2">
                             {selectedFile.tags.map(tag => {
-                                const isAITag = tag.type === 'ai' || tag.source === 'ai'
+                                // Get tag data from either direct property or nested tag object
+                                const tagData = tag.tag || tag;
+                                const tagName = tagData.name || '';
+                                const isAITag = tagData.type === 'ai' || tagData.source === 'ai';
                                 return (
                                     <span
-                                        key={tag.id}
+                                        key={tag.id || tagData.id}
                                         className="px-2 py-0.5 rounded text-[10px] border transition-colors flex items-center gap-1"
-                                        style={getTagStyle(tag)}
+                                        style={getTagStyle(tagData)}
                                     >
-                                        {tag.name}
+                                        {tagName}
                                         {isAITag && (
                                             <span className="text-[8px] bg-green-500/20 text-green-400 px-1 rounded font-bold">
                                                 {t('ai_tag_indicator')}

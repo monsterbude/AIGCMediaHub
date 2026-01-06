@@ -39,10 +39,28 @@ export async function POST(request) {
       },
     });
 
+    // Convert BigInt to string for JSON serialization
+    const serializeFile = (f) => {
+      if (!f) return null;
+      return {
+        ...f,
+        fileSize: f.fileSize.toString(),
+        createdTime: f.createdTime,
+        modifiedTime: f.modifiedTime,
+        lastScanned: f.lastScanned,
+        tags: f.tags.map(tag => ({
+          ...tag,
+          tag: {
+            ...tag.tag
+          }
+        }))
+      };
+    };
+
     return NextResponse.json({
       success: true,
       tags: tags,
-      file: file,
+      file: serializeFile(file),
     });
   } catch (error) {
     console.error("[API] AI tag file error:", error);

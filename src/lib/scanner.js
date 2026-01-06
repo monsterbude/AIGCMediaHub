@@ -60,7 +60,7 @@ export async function scanDirectory(dirPath, onProgress = () => { }, options = {
             include: { aigcMetaInfo: true } // Check if meta already extracted
           })
 
-          if (!force && existingFile &&
+          if (existingFile &&
             existingFile.fileSize === BigInt(stats.size) &&
             existingFile.modifiedTime.getTime() === stats.mtime.getTime()) {
 

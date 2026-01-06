@@ -228,16 +228,20 @@ export default function Gallery({
                     </div>
                     {file.tags && file.tags.length > 0 && (
                       <div className="mt-2 pt-2 border-t border-gray-700/30 flex flex-wrap gap-1">
-                        {file.tags.slice(0, 3).map((tag) => (
-                          <span
-                            key={tag.id}
-                            className="text-[9px] px-1.5 py-0.5 rounded border"
-                            style={getTagStyle(tag)}
-                          >
-                            {tag.name.slice(0, 3)}
-                            {tag.name.length > 3 ? ".." : ""}
-                          </span>
-                        ))}
+                        {file.tags.slice(0, 3).map((tag) => {
+                          // Get tag name from either direct property or nested tag object
+                          const tagName = tag.tag?.name || tag.name || '';
+                          return (
+                            <span
+                              key={tag.id || tag.tag?.id}
+                              className="text-[9px] px-1.5 py-0.5 rounded border"
+                              style={getTagStyle(tag.tag || tag)}
+                            >
+                              {tagName.slice(0, 3)}
+                              {tagName.length > 3 ? ".." : ""}
+                            </span>
+                          );
+                        })}
                         {file.tags.length > 3 && (
                           <span className="text-[9px] text-gray-400">...</span>
                         )}
@@ -403,15 +407,19 @@ export default function Gallery({
                     </td>
                     <td className="px-6 py-3">
                       <div className="flex flex-wrap gap-1.5 max-w-sm">
-                        {file.tags?.slice(0, 5).map((tag) => (
-                          <span
-                            key={tag.id}
-                            className="text-[10px] px-2 py-0.5 rounded border transition-all"
-                            style={getTagStyle(tag)}
-                          >
-                            {tag.name}
-                          </span>
-                        ))}
+                        {file.tags?.slice(0, 5).map((tag) => {
+                          // Get tag name from either direct property or nested tag object
+                          const tagName = tag.tag?.name || tag.name || '';
+                          return (
+                            <span
+                              key={tag.id || tag.tag?.id}
+                              className="text-[10px] px-2 py-0.5 rounded border transition-all"
+                              style={getTagStyle(tag.tag || tag)}
+                            >
+                              {tagName}
+                            </span>
+                          );
+                        })}
                         {file.tags?.length > 5 && (
                           <span className="text-[10px] text-gray-500 font-bold">
                             +{file.tags.length - 5}

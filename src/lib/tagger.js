@@ -35,24 +35,46 @@ async function initPlugin() {
     ort = await import("onnxruntime-node");
 
     // Load ONNX model
-    session = await ort.InferenceSession.create(MODEL_PATH, {
-      executionProviders: ["cpu"], // Default to CPU, can be extended to GPU
-    });
+  session = await ort.InferenceSession.create(MODEL_PATH, {
+    executionProviders: ["cpu"], // Default to CPU, can be extended to GPU
+  });
+
+  // Print model input and output information for debugging
+  console.log("[AI Tagger] Model input information:");
+  session.inputNames.forEach(name => {
+    console.log(`[AI Tagger] Input: ${name}`);
+  });
+  console.log("[AI Tagger] Model output information:");
+  session.outputNames.forEach(name => {
+    console.log(`[AI Tagger] Output: ${name}`);
+  });
 
     // Load labels from CSV
     const csvContent = await fs.readFile(LABELS_PATH, "utf-8");
     labels = csvContent
       .split("\n")
       .filter((line) => line.trim())
+      .slice(1) // Skip header line
       .map((line) => {
         const parts = line.split(",");
-        return parts[1] ? parts[1].trim() : parts[0].trim();
-      });
+        // Get the name from the second column, or fallback to first column
+        const tagName = parts[1] ? parts[1].trim() : parts[0].trim();
+        // Filter out invalid tags
+        return tagName && tagName !== "name" ? tagName : null;
+      })
+      .filter((tag) => tag !== null); // Remove null entries
+
+    console.log(`[AI Tagger] Loaded ${labels.length} labels`);
+    // Debug: Log labels around monochrome and greyscale indices
+    console.log(`[AI Tagger] Labels at indices 59-62:`, labels.slice(59, 63));
+    console.log(`[AI Tagger] Labels at indices 80-84:`, labels.slice(80, 85));
 
     isPluginAvailable = true;
     console.log(
       `[AI Tagger] Plugin loaded successfully. ${labels.length} labels available.`
     );
+    // Debug: Log first 10 labels to check order
+    console.log(`[AI Tagger] First 10 labels:`, labels.slice(0, 10));
     return true;
   } catch (error) {
     console.error("[AI Tagger] Failed to initialize plugin:", error);
@@ -66,7 +88,14 @@ async function initPlugin() {
  */
 export async function isAITaggerEnabled() {
   const enabled = await getSetting("ai_tagger_enabled", "false");
-  return enabled === "true" && isPluginAvailable;
+  if (enabled !== "true") {
+    return false;
+  }
+  // Initialize plugin if not already done
+  if (!isPluginAvailable) {
+    await initPlugin();
+  }
+  return isPluginAvailable;
 }
 
 /**
@@ -84,39 +113,47 @@ export async function getPluginStatus() {
 }
 
 /**
- * Preprocess image for model input
+ * 核心预处理：0-255 量程 + BGR 顺序 + NHWC 布局
  */
 async function preprocessImage(imagePath) {
   try {
-    // Resize to 448x448 and normalize
-    const buffer = await sharp(imagePath)
-      .resize(448, 448, { fit: "fill" })
+    const targetSize = 448;
+    const { data, info } = await sharp(imagePath)
+      .resize(targetSize, targetSize, {
+        fit: "contain",
+        background: { r: 255, g: 255, b: 255 }
+      })
+      .flatten({ background: { r: 255, g: 255, b: 255 } })
       .removeAlpha()
+      .toColourspace('srgb')
       .raw()
       .toBuffer({ resolveWithObject: true });
 
-    const { data, info } = buffer;
     const { width, height, channels } = info;
+    console.log(`[AI Tagger] Preprocessing image: ${imagePath}, width: ${width}, height: ${height}, channels: ${channels}`);
 
-    // Normalize to [0, 1] and convert to Float32Array
-    const float32Data = new Float32Array(width * height * channels);
-    for (let i = 0; i < data.length; i++) {
-      float32Data[i] = data[i] / 255.0;
+    // Check if data is valid
+    if (!data || data.length === 0) {
+      throw new Error('Empty image data');
     }
 
-    // Reshape to [1, 3, 448, 448] (NCHW format)
-    const rgbData = new Float32Array(1 * 3 * height * width);
-    for (let c = 0; c < 3; c++) {
-      for (let h = 0; h < height; h++) {
-        for (let w = 0; w < width; w++) {
-          const srcIdx = (h * width + w) * channels + c;
-          const dstIdx = c * (height * width) + h * width + w;
-          rgbData[dstIdx] = float32Data[srcIdx];
-        }
-      }
+    // Debug: Log first few pixels of raw data
+    console.log(`[AI Tagger] First 10 raw pixels:`, Array.from(data.slice(0, 30)));
+
+    const imageSize = targetSize * targetSize;
+    const floatData = new Float32Array(imageSize * 3);
+
+    // WD14 特性：不除以 255，使用 BGR 顺序
+    for (let i = 0; i < imageSize; i++) {
+      floatData[i * 3]     = data[i * 3 + 2]; // B
+      floatData[i * 3 + 1] = data[i * 3 + 1]; // G
+      floatData[i * 3 + 2] = data[i * 3];     // R
     }
 
-    return new ort.Tensor("float32", rgbData, [1, 3, height, width]);
+    // Debug: Log first few processed pixels
+    console.log(`[AI Tagger] First 10 processed pixels (BGR):`, floatData.slice(0, 30));
+
+    return new ort.Tensor("float32", floatData, [1, targetSize, targetSize, 3]);
   } catch (error) {
     console.error("[AI Tagger] Image preprocessing failed:", error);
     throw error;
@@ -124,7 +161,7 @@ async function preprocessImage(imagePath) {
 }
 
 /**
- * Tag an image using AI model
+ * 图像打标
  * @param {number} fileId - Database file ID
  * @returns {Promise<string[]>} Array of detected tags
  */
@@ -152,38 +189,63 @@ export async function tagImage(fileId) {
       return [];
     }
 
-    // Prioritize thumbnail if available
-    const imagePath =
-      file.thumbnailPath && (await fs.pathExists(file.thumbnailPath))
-        ? file.thumbnailPath
-        : file.filePath;
+    // Force using original image for better quality
+    const imagePath = file.filePath;
 
     console.log(
-      `[AI Tagger] Processing ${imagePath} (using ${
-        file.thumbnailPath ? "thumbnail" : "original"
-      })`
+      `[AI Tagger] Processing ${imagePath} (using original image)`
     );
+    
+    // Debug: Check if file exists
+    const fileExists = await fs.pathExists(imagePath);
+    console.log(`[AI Tagger] File exists: ${fileExists}`);
+    if (fileExists) {
+      const stats = await fs.stat(imagePath);
+      console.log(`[AI Tagger] File size: ${stats.size} bytes`);
+    }
 
     // Preprocess image
     const inputTensor = await preprocessImage(imagePath);
 
     // Run inference
-    const feeds = { input: inputTensor };
-    const results = await session.run(feeds);
-    const output = results[Object.keys(results)[0]];
+    let results;
+    try {
+        if (session.inputNames && session.inputNames.length > 0) {
+            const inputName = session.inputNames[0];
+            console.log(`[AI Tagger] Using model input name: ${inputName}`);
+            console.log(`[AI Tagger] Processing file: ${fileId}, image path: ${imagePath}`);
+            results = await session.run({ [inputName]: inputTensor });
+            
+            // Debug: Log model output information
+            console.log(`[AI Tagger] Model output keys:`, Object.keys(results));
+            const outputKey = Object.keys(results)[0];
+            const output = results[outputKey];
+            console.log(`[AI Tagger] Output shape:`, output.dims);
+            console.log(`[AI Tagger] Output type:`, output.type);
+            console.log(`[AI Tagger] First 10 output values:`, output.data.slice(0, 10));
+        } else {
+            throw new Error('Model has no input names');
+        }
+    } catch (e) {
+        console.error(`[AI Tagger] Model inference failed:`, e);
+        throw new Error(`Failed to run model inference: ${e.message}`);
+    }
+    const output = results[session.outputNames[0]];
+    const scores = output.data;
 
-    // Get threshold from settings
-    const threshold = parseFloat(
-      await getSetting("ai_tagger_threshold", "0.35")
-    );
+    // 使用更合理的阈值
+    const threshold = 0.35;
+
+    console.log(`[AI Tagger] Using threshold: ${threshold}`);
 
     // Filter tags by threshold
     const detectedTags = [];
-    for (let i = 0; i < output.data.length; i++) {
-      if (output.data[i] > threshold && labels[i]) {
+    for (let i = 0; i < scores.length; i++) {
+      const score = scores[i]; // 直接使用原始分值
+      if (i < labels.length && score > threshold) {
         detectedTags.push({
           name: labels[i],
-          confidence: output.data[i],
+          confidence: score
         });
       }
     }
@@ -194,6 +256,10 @@ export async function tagImage(fileId) {
     console.log(
       `[AI Tagger] Detected ${detectedTags.length} tags for file ${fileId}`
     );
+    console.log(`[AI Tagger] Top 15 tags:`);
+    detectedTags.slice(0, 15).forEach((tag, index) => {
+      console.log(`  ${index + 1}. ${tag.name}: ${tag.confidence.toFixed(4)}`);
+    });
 
     // Save tags to database
     await saveAITags(
@@ -212,6 +278,19 @@ export async function tagImage(fileId) {
  * Save AI-generated tags to database
  */
 async function saveAITags(fileId, tagNames) {
+  try {
+    // Remove all existing AI tags for this file first
+    await prisma.fileTag.deleteMany({
+      where: {
+        fileId: fileId,
+        source: "ai",
+      },
+    });
+    console.log(`[AI Tagger] Removed existing AI tags for file ${fileId}`);
+  } catch (e) {
+    console.error("[AI Tagger] Error removing existing AI tags:", e);
+  }
+
   for (const tagName of tagNames) {
     try {
       // Create or find tag
@@ -226,15 +305,8 @@ async function saveAITags(fileId, tagNames) {
       });
 
       // Link to file
-      await prisma.fileTag.upsert({
-        where: {
-          fileId_tagId: {
-            fileId: fileId,
-            tagId: tag.id,
-          },
-        },
-        update: { source: "ai" },
-        create: {
+      await prisma.fileTag.create({
+        data: {
           fileId: fileId,
           tagId: tag.id,
           source: "ai",
