@@ -69,3 +69,5 @@ Once started, visit [http://localhost:3000](http://localhost:3000) to access the
 - **Images missing?** Ensure the path is correct and files contain standard metadata.
 - **Slow loading?** Initial scans generate thumbnails. Subsequent access will be much faster.
 - **Rescan**: Click `Scan` again to sync changes (orphaned records for deleted files will be removed).
+- **Development Conventions**:
+  - **Modularity Principle**: If a code file exceeds **500 lines**, it must be split into smaller components or modules.
