@@ -1,0 +1,52 @@
+{
+  "appId": "com.aigcmediahub.app",
+  "productName": "AIGC Media Hub",
+  "copyright": "Copyright © 2026",
+  "directories": {
+    "output": "dist",
+    "buildResources": "build"
+  },
+  "files": [
+    "electron/**/*",
+    ".next/**/*",
+    "public/**/*",
+    "package.json",
+    "next.config.mjs",
+    "node_modules/**/*",
+    "!node_modules/.cache/**/*"
+  ],
+  "extraResources": [
+    {
+      "from": "prisma",
+      "to": "prisma"
+    },
+    {
+      "from": "plugins",
+      "to": "plugins"
+    },
+    {
+      "from": ".cache",
+      "to": ".cache",
+      "filter": ["**/*"]
+    }
+  ],
+  "win": {
+    "target": [
+      {
+        "target": "portable",
+        "arch": ["x64"]
+      }
+    ],
+    "icon": "build/icon.ico",
+    "artifactName": "AIGCMediaHub${version}_${arch}.${ext}"
+  },
+  "portable": {
+    "artifactName": "AIGCMediaHub${version}_${arch}.exe"
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true
+  }
+}

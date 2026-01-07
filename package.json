@@ -1,12 +1,16 @@
 {
   "name": "aigc-media-hub",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
+  "main": "electron/main.js",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
+    "electron:build": "next build",
+    "electron:pack": "node scripts/build-electron.js && electron-builder --config electron-builder.json"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
@@ -27,11 +31,13 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "babel-plugin-react-compiler": "1.0.0",
+    "concurrently": "^9.2.1",
     "electron": "^39.2.7",
     "electron-builder": "^26.4.0",
     "electron-is-dev": "^3.0.1",
     "eslint": "^9",
     "eslint-config-next": "16.1.1",
-    "tailwindcss": "^4"
+    "tailwindcss": "^4",
+    "wait-on": "^9.0.3"
   }
 }
