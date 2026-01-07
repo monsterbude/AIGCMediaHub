@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { SettingsIcon, RefreshIcon, TrashIcon } from './Icons'
 
 export default function SettingsModal({
@@ -24,6 +24,23 @@ export default function SettingsModal({
     const [page, setPage] = useState(0)
     const [totalTags, setTotalTags] = useState(0)
     const tagPoolRef = useRef(null)
+
+    const loadMoreTags = useCallback(async () => {
+        setLoading(true)
+        try {
+            const nextPage = page + 1
+            const skip = nextPage * 500
+            const result = await fetchTagPool(skip, 500, true)
+            if (result) {
+                setPage(nextPage)
+                setTotalTags(result.total)
+            }
+        } catch (error) {
+            console.error('Error loading more tags:', error)
+        } finally {
+            setLoading(false)
+        }
+    }, [page, fetchTagPool])
 
     useEffect(() => {
         if (isSettingsOpen) {
@@ -59,24 +76,7 @@ export default function SettingsModal({
                 tagPoolElement.removeEventListener('scroll', handleScroll)
             }
         }
-    }, [loading, tagPool.length, totalTags, fetchTagPool])
-
-    const loadMoreTags = async () => {
-        setLoading(true)
-        try {
-            const nextPage = page + 1
-            const skip = nextPage * 500
-            const result = await fetchTagPool(skip, 500, true)
-            if (result) {
-                setPage(nextPage)
-                setTotalTags(result.total)
-            }
-        } catch (error) {
-            console.error('Error loading more tags:', error)
-        } finally {
-            setLoading(false)
-        }
-    }
+    }, [loading, tagPool.length, totalTags, loadMoreTags])
 
     if (!isSettingsOpen) return null
 
@@ -197,6 +197,11 @@ export default function SettingsModal({
                                                 >
                                                     {tag.name}
                                                     <span className="text-[10px] opacity-40 uppercase">{tag.type}</span>
+                                                    {tag.count > 0 && (
+                                                        <span className="ml-1 text-[10px] bg-blue-600/20 text-blue-400 px-1.5 py-0.5 rounded-full">
+                                                            {tag.count}
+                                                        </span>
+                                                    )}
                                                 </div>
                                                 <button
                                                     onClick={() => deleteTagFromPool(tag.id)}
@@ -271,7 +276,7 @@ function AITaggerSettings({ t, systemSettings, setSystemSettings, saveSetting })
                         onClick={() => {
                             const newValue = !aiEnabled
                             setSystemSettings(prev => ({ ...prev, aiTaggerEnabled: String(newValue) }))
-                            saveSetting('ai_tagger_enabled', String(newValue))
+                            saveSetting('aiTaggerEnabled', String(newValue))
                         }}
                         disabled={!pluginStatus.available}
                         className={`relative w-12 h-6 rounded-full transition-colors ${aiEnabled ? 'bg-blue-600' : 'bg-gray-700'

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { translations } from '@/lib/i18n'
 import { buildFolderTree, formatFileSize, getTagStyle } from '@/lib/utils'
 
@@ -161,7 +161,7 @@ export function useAppLogic() {
         } catch (e) { console.error(e) }
     }
 
-    const fetchTagPool = async (skip = 0, take = 500, append = false) => {
+    const fetchTagPool = useCallback(async (skip = 0, take = 500, append = false) => {
         try {
             const res = await fetch(`/api/tags/pool?skip=${skip}&take=${take}`)
             const data = await res.json()
@@ -172,7 +172,7 @@ export function useAppLogic() {
             }
             return { tags: data.tags, total: data.total }
         } catch (e) { console.error(e) }
-    }
+    }, [])
 
     const addTagToPool = async () => {
         if (!newTagName.trim()) return
@@ -200,7 +200,7 @@ export function useAppLogic() {
             fetchPaths()
             fetchTagPool()
         }
-    }, [isSettingsOpen])
+    }, [isSettingsOpen, fetchTagPool])
 
     const fetchTags = async () => {
         try {
@@ -221,6 +221,11 @@ export function useAppLogic() {
     useEffect(() => {
         fetchFiles(selectedFolder)
     }, [selectedFolder])
+
+    // Fetch files when selected extensions change
+    useEffect(() => {
+        fetchFiles(selectedFolder)
+    }, [selectedFolder, selectedExtensions])
 
     // Filter Logic
     useEffect(() => {

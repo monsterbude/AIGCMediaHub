@@ -14,9 +14,7 @@ export async function GET() {
   try {
     const tags = await prisma.tag.findMany({
       include: {
-        _count: {
-          select: { files: true }
-        }
+        tagCount: true
       },
       orderBy: {
         name: 'asc'
@@ -33,7 +31,7 @@ export async function GET() {
         id: tag.id,
         name: tag.name,
         type: tag.type,
-        count: tag._count.files,
+        count: tag.tagCount?.count || 0,
         color: tag.color
       })
       return acc

@@ -71,6 +71,7 @@ model Tag {
   createdTime DateTime  @default(now()) @map("created_time")
 
   files       FileTag[]
+  tagCount    TagCount?
 
   @@index([type])
   @@map("tags")
@@ -96,4 +97,14 @@ model SystemSetting {
   value String
 
   @@map("system_settings")
+}
+
+model TagCount {
+  id           Int      @id @default(autoincrement())
+  tagId        Int      @unique @map("tag_id")
+  tag          Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  count        Int      @default(0)
+  lastUpdated  DateTime @default(now()) @map("last_updated")
+
+  @@map("tag_counts")
 }

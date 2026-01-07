@@ -5,7 +5,9 @@ export async function GET() {
   try {
     const settings = await prisma.systemSetting.findMany()
     const settingsMap = settings.reduce((acc, s) => {
-      acc[s.key] = s.value
+      // Convert snake_case to camelCase for frontend compatibility
+      const camelKey = s.key.replace(/(_[a-z])/g, group => group.toUpperCase().replace('_', ''))
+      acc[camelKey] = s.value
       return acc
     }, {})
     
@@ -15,6 +17,9 @@ export async function GET() {
     }
     if (!settingsMap.scanConcurrency) {
         settingsMap.scanConcurrency = '4'
+    }
+    if (!settingsMap.aiTaggerEnabled) {
+        settingsMap.aiTaggerEnabled = 'false'
     }
 
     return NextResponse.json(settingsMap)
@@ -30,10 +35,13 @@ export async function POST(request) {
 
     if (!key) return NextResponse.json({ error: 'Key is required' }, { status: 400 })
 
+    // Convert camelCase to snake_case for database storage
+    const snakeKey = key.replace(/([A-Z])/g, '_$1').toLowerCase()
+
     const setting = await prisma.systemSetting.upsert({
-      where: { key },
+      where: { key: snakeKey },
       update: { value: String(value) },
-      create: { key, value: String(value) }
+      create: { key: snakeKey, value: String(value) }
     })
 
     return NextResponse.json(setting)

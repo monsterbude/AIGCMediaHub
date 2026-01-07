@@ -3,6 +3,7 @@ import path from "path";
 import sharp from "sharp";
 import prisma from "./prisma";
 import { getSetting } from "./settings";
+import { updateMultipleTagCounts } from "./tagCountUtils.js";
 
 // Plugin detection
 const PLUGIN_DIR = path.join(process.cwd(), "plugins", "ai-tagger");
@@ -278,15 +279,30 @@ export async function tagImage(fileId) {
  * Save AI-generated tags to database
  */
 async function saveAITags(fileId, tags) {
+  const tagIdsToUpdate = new Set();
+
   try {
     // Remove all existing AI tags for this file first
-    await prisma.fileTag.deleteMany({
+    const existingTags = await prisma.fileTag.findMany({
       where: {
         fileId: fileId,
         source: "ai",
       },
+      select: { tagId: true }
     });
-    console.log(`[AI Tagger] Removed existing AI tags for file ${fileId}`);
+
+    if (existingTags.length > 0) {
+      await prisma.fileTag.deleteMany({
+        where: {
+          fileId: fileId,
+          source: "ai",
+        },
+      });
+      console.log(`[AI Tagger] Removed existing AI tags for file ${fileId}`);
+
+      // Add existing tag IDs to update list
+      existingTags.forEach(ft => tagIdsToUpdate.add(ft.tagId));
+    }
   } catch (e) {
     console.error("[AI Tagger] Error removing existing AI tags:", e);
   }
@@ -313,8 +329,21 @@ async function saveAITags(fileId, tags) {
           weight: tag.confidence,
         },
       });
+
+      // Add new tag ID to update list
+      tagIdsToUpdate.add(tagObj.id);
     } catch (e) {
       console.error("[AI Tagger] Error saving tag:", tag.name, e);
+    }
+  }
+
+  // Update tag counts for all affected tags
+  if (tagIdsToUpdate.size > 0) {
+    try {
+      await updateMultipleTagCounts(Array.from(tagIdsToUpdate));
+      console.log(`[AI Tagger] Updated counts for ${tagIdsToUpdate.size} tags`);
+    } catch (e) {
+      console.error("[AI Tagger] Error updating tag counts:", e);
     }
   }
 }

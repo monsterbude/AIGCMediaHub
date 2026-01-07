@@ -35,44 +35,68 @@ export async function generateThumbnail(filePath) {
     if (isVideo) {
         console.log(`[Thumbnail] Extracting frame from video: ${filePath}`)
         // Extract first frame from video
-        await new Promise((resolve, reject) => {
-            ffmpeg(filePath)
-                .on('end', () => {
-                    console.log(`[Thumbnail] FFmpeg finished for: ${filePath}`)
-                    resolve()
-                })
-                .on('error', (err) => {
-                    console.error(`[Thumbnail] FFmpeg error for ${filePath}:`, err)
-                    reject(err)
-                })
-                .screenshots({
-                    timestamps: [1], // Use number instead of string for 1 second
-                    folder: CACHE_DIR,
-                    filename: thumbName.replace('.webp', '.jpg'),
-                    size: '400x?'
-                })
-        })
+        let tempPath = path.join(CACHE_DIR, thumbName.replace('.webp', '.jpg'))
         
-        // Convert the extracted frame to webp using sharp for consistency
-        const tempPath = path.join(CACHE_DIR, thumbName.replace('.webp', '.jpg'))
+        // Try multiple approaches to extract a frame
+        const extractionAttempts = [
+            // Try 0.5 seconds
+            { timestamps: [0.5], label: '0.5s' },
+            // Try 2 seconds
+            { timestamps: [2], label: '2s' },
+            // Try first frame
+            { count: 1, label: 'first frame' },
+            // Try 5 seconds
+            { timestamps: [5], label: '5s' }
+        ]
         
-        // Wait a bit for FFmpeg to fully release the file (Windows optimization)
-        await new Promise(r => setTimeout(r, 200))
-
-        if (!await fs.pathExists(tempPath)) {
-            // If 1s failed, try simple count 1
-            await new Promise((resolve, reject) => {
-                ffmpeg(filePath)
-                    .on('end', resolve)
-                    .on('error', reject)
-                    .screenshots({
-                        count: 1,
-                        folder: CACHE_DIR,
-                        filename: thumbName.replace('.webp', '.jpg'),
-                        size: '400x?'
-                    })
-            })
-            await new Promise(r => setTimeout(r, 200))
+        let extractionSuccess = false
+        
+        for (const attempt of extractionAttempts) {
+            try {
+                await new Promise((resolve, reject) => {
+                    const cmd = ffmpeg(filePath)
+                        .on('end', () => {
+                            console.log(`[Thumbnail] FFmpeg ${attempt.label} attempt finished for: ${filePath}`)
+                            resolve()
+                        })
+                        .on('error', (err) => {
+                            console.warn(`[Thumbnail] FFmpeg ${attempt.label} attempt failed for ${filePath}:`, err.message)
+                            reject(err)
+                        })
+                    
+                    if (attempt.timestamps) {
+                        cmd.screenshots({
+                            timestamps: attempt.timestamps,
+                            folder: CACHE_DIR,
+                            filename: thumbName.replace('.webp', '.jpg'),
+                            size: '400x?'
+                        })
+                    } else if (attempt.count) {
+                        cmd.screenshots({
+                            count: attempt.count,
+                            folder: CACHE_DIR,
+                            filename: thumbName.replace('.webp', '.jpg'),
+                            size: '400x?'
+                        })
+                    }
+                })
+                
+                // Wait a bit for FFmpeg to fully release the file (Windows optimization)
+                await new Promise(r => setTimeout(r, 300))
+                
+                if (await fs.pathExists(tempPath)) {
+                    extractionSuccess = true
+                    break
+                }
+            } catch (error) {
+                // Continue to next attempt
+                console.warn(`[Thumbnail] Extraction attempt failed: ${error.message}`)
+            }
+        }
+        
+        if (!extractionSuccess) {
+            console.error(`[Thumbnail] All extraction attempts failed for: ${filePath}`)
+            return null
         }
 
         if (await fs.pathExists(tempPath)) {
@@ -92,8 +116,9 @@ export async function generateThumbnail(filePath) {
         }
     } else {
         // Generate thumbnail for image
+        const targetSize = 448;
         await sharp(filePath)
-          .resize(400, 400, {
+          .resize(targetSize, targetSize, {
             fit: 'inside',
             withoutEnlargement: true
           })

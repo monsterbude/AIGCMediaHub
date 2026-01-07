@@ -1,8 +1,29 @@
 import fs from 'fs-extra'
+import path from 'path'
+import sharp from 'sharp'
 import exifr from 'exifr'
 
 export async function parseAigcMetadata(filePath) {
     try {
+        const ext = path.extname(filePath).toLowerCase().replace('.', '')
+        
+        // Skip metadata parsing for certain file types that exifr might not handle well
+        if (['webp'].includes(ext)) {
+            console.log(`[Metadata] Skipping metadata parsing for ${ext} file: ${filePath}`)
+            // Return basic dimensions using sharp for webp files
+            try {
+                const image = sharp(filePath)
+                const metadata = await image.metadata()
+                return {
+                    width: metadata.width,
+                    height: metadata.height
+                }
+            } catch (sharpError) {
+                console.warn(`[Metadata] Sharp failed for ${filePath}:`, sharpError.message)
+                return null
+            }
+        }
+        
         const buffer = await fs.readFile(filePath)
 
         // Try parsing with exifr
@@ -117,16 +138,41 @@ function parseComfyUI(promptJsonStr, workflowJsonStr) {
 
             if (widgets && Array.isArray(widgets)) {
                 // Workflow format typically: [seed, control_after_generate, steps, cfg, sampler_name, scheduler, denoise]
-                result.seed = BigInt(widgets[0])
-                result.steps = parseInt(widgets[2])
-                result.cfgScale = parseFloat(widgets[3])
-                result.sampler = widgets[4]
+                // Add type checks to prevent conversion errors
+                const seedValue = widgets[0]
+                if (seedValue != null && (typeof seedValue === 'number' || !isNaN(seedValue))) {
+                    result.seed = BigInt(seedValue)
+                }
+                const stepsValue = widgets[2]
+                if (stepsValue != null && (typeof stepsValue === 'number' || !isNaN(stepsValue))) {
+                    result.steps = parseInt(stepsValue)
+                }
+                const cfgValue = widgets[3]
+                if (cfgValue != null && (typeof cfgValue === 'number' || !isNaN(cfgValue))) {
+                    result.cfgScale = parseFloat(cfgValue)
+                }
+                const samplerValue = widgets[4]
+                if (samplerValue != null) {
+                    result.sampler = String(samplerValue)
+                }
             } else {
                 // Prompt format
-                result.seed = BigInt(inputs.seed || 0)
-                result.steps = parseInt(inputs.steps)
-                result.cfgScale = parseFloat(inputs.cfg)
-                result.sampler = inputs.sampler_name
+                const seedValue = inputs.seed
+                if (seedValue != null && (typeof seedValue === 'number' || !isNaN(seedValue))) {
+                    result.seed = BigInt(seedValue || 0)
+                }
+                const stepsValue = inputs.steps
+                if (stepsValue != null && (typeof stepsValue === 'number' || !isNaN(stepsValue))) {
+                    result.steps = parseInt(stepsValue)
+                }
+                const cfgValue = inputs.cfg
+                if (cfgValue != null && (typeof cfgValue === 'number' || !isNaN(cfgValue))) {
+                    result.cfgScale = parseFloat(cfgValue)
+                }
+                const samplerValue = inputs.sampler_name
+                if (samplerValue != null) {
+                    result.sampler = String(samplerValue)
+                }
             }
         }
 
@@ -219,9 +265,14 @@ function parseTechnicalParams(paramsStr, result) {
 
     const firstComma = paramsStr.indexOf(',')
     if (firstComma !== -1) {
-        result.steps = parseInt(paramsStr.substring(0, firstComma))
+        const stepsValue = paramsStr.substring(0, firstComma)
+        if (stepsValue != null && !isNaN(stepsValue)) {
+            result.steps = parseInt(stepsValue)
+        }
     } else {
-        result.steps = parseInt(paramsStr)
+        if (paramsStr != null && !isNaN(paramsStr)) {
+            result.steps = parseInt(paramsStr)
+        }
     }
 
     let match
@@ -231,12 +282,22 @@ function parseTechnicalParams(paramsStr, result) {
 
         switch (key) {
             case 'Sampler': result.sampler = value; break;
-            case 'CFG scale': result.cfgScale = parseFloat(value); break;
-            case 'Seed': result.seed = BigInt(value); break;
+            case 'CFG scale': 
+                if (value != null && !isNaN(value)) {
+                    result.cfgScale = parseFloat(value)
+                }
+                break;
+            case 'Seed': 
+                if (value != null && !isNaN(value)) {
+                    result.seed = BigInt(value)
+                }
+                break;
             case 'Size':
                 const [w, h] = value.split('x').map(Number);
-                result.width = w;
-                result.height = h;
+                if (w != null && h != null && !isNaN(w) && !isNaN(h)) {
+                    result.width = w;
+                    result.height = h;
+                }
                 break;
             case 'Model hash': result.modelHash = value; break;
             case 'Model': result.modelName = value; break;

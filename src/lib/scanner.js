@@ -144,9 +144,12 @@ async function processFile(file, dirPath, onProgress, options = {}) {
           try {
             // Check if AI tagging is enabled in settings
             const aiEnabled = await getSetting('ai_tagger_enabled', 'false')
+            console.log(`[Scanner] AI tagging enabled: ${aiEnabled} for file ${file.name}`)
             if (aiEnabled === 'true') {
               const { tagImage } = await import('@/lib/tagger')
               await tagImage(upsertedFile.id)
+            } else {
+              console.log(`[Scanner] AI tagging skipped for ${file.name} (disabled in settings)`)
             }
           } catch (aiError) {
             // Silently fail if AI tagger is not available or disabled
